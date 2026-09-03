@@ -1,0 +1,68 @@
+# MCP servers — docs/06-mcp-architecture.md
+#
+# Enabling a server never auto-grants it. Grants are a separate, deliberate act (see the seed and
+# the dashboard), because deny-by-default is the whole point of the permission layer.
+
+servers:
+  product:
+    name: Product MCP
+    enabled: true
+    transport: stdio
+    command: node
+    args: ['./packages/mcp/product/dist/server.js']
+    config:
+      backend: local # local | jira | linear | custom | mock
+    permissions: [product.read, product.write]
+
+  ba:
+    name: Business Analyst MCP
+    enabled: true
+    transport: stdio
+    command: node
+    args: ['./packages/mcp/ba/dist/server.js']
+    config:
+      backend: local # local | jira | linear | azure-devops | github-issues | custom | mock
+    permissions: [backlog.read, backlog.write, story.split, story.merge]
+
+  filesystem:
+    name: Jailed Filesystem
+    enabled: true
+    transport: stdio
+    command: node
+    args: ['./packages/mcp/filesystem/dist/server.js']
+    permissions: [fs.read, fs.write]
+
+  github:
+    name: GitHub MCP
+    enabled: false
+    transport: stdio
+    command: npx
+    args: ['-y', '@modelcontextprotocol/server-github']
+    env:
+      GITHUB_TOKEN: secret:github_token
+    # Note: pull_request.merge is deliberately absent. It exists as a scope but is never
+    # granted unless AI_MERGE_PERMISSION=true and an admin creates the grant (invariant I7).
+    permissions:
+      - repository.read
+      - branch.create
+      - commit.create
+      - push
+      - pull_request.create
+      - pull_request.comment
+
+  figma:
+    name: Figma MCP
+    enabled: false
+    transport: http
+    url: http://localhost:3845/mcp
+    env:
+      FIGMA_TOKEN: secret:figma_token
+    permissions: [design.read]
+
+  playwright:
+    name: Playwright MCP
+    enabled: false
+    transport: stdio
+    command: npx
+    args: ['-y', '@playwright/mcp@latest']
+    permissions: [browser.full]

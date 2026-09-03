@@ -1,0 +1,19 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": [".env", "config/**"],
+  "globalEnv": ["NODE_ENV", "DEMO_MODE", "DATABASE_URL", "REDIS_URL", "TEMPORAL_ADDRESS"],
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**", ".next/**", "!.next/cache/**"] },
+    "dev": { "cache": false, "persistent": true },
+    "lint": { "dependsOn": ["^build"] },
+    "typecheck": { "dependsOn": ["^build"] },
+    "test": { "dependsOn": ["^build"] },
+    "test:unit": { "dependsOn": ["^build"] },
+    "test:workflow": { "dependsOn": ["^build"] },
+    "test:integration": { "dependsOn": ["^build"], "cache": false },
+    "test:e2e": { "dependsOn": ["^build"], "cache": false },
+    "generate": { "cache": false },
+    "clean": { "cache": false }
+  }
+}

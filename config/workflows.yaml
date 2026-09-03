@@ -1,0 +1,24 @@
+# Approval gates and iteration limits — docs/08 and docs/11 §3.
+#
+# autoApprove is false everywhere. Turning it on is an admin action and is itself audited: the
+# gates are the control this whole platform exists to provide.
+
+approvalGates:
+  BACKLOG: { enabled: true, requiredRole: PRODUCT, timeoutHours: 72, autoApprove: false }
+  ARCHITECTURE: { enabled: true, requiredRole: ARCHITECT, timeoutHours: 72, autoApprove: false }
+  ESTIMATION: { enabled: true, requiredRole: PRODUCT, timeoutHours: 48, autoApprove: false }
+  DEV_READINESS: { enabled: true, requiredRole: PRODUCT, timeoutHours: 48, autoApprove: false }
+  PR: { enabled: true, requiredRole: ENGINEER, timeoutHours: 72, autoApprove: false }
+  QA: { enabled: true, requiredRole: QA, timeoutHours: 48, autoApprove: false }
+  RELEASE: { enabled: true, requiredRole: ADMIN, timeoutHours: 168, autoApprove: false }
+
+limits:
+  maxPrFixIterations: 3
+  maxQaFixIterations: 3
+  maxBuildFixIterations: 2
+  maxBacklogRevisions: 3
+  maxArchitectureRounds: 2
+  maxParallelStories: 3
+  maxWorkflowCostUsd: 25
+  estimationVarianceThreshold: 0.30
+  approvalDefaultTimeoutHours: 72

@@ -1,0 +1,102 @@
+# Per-agent budgets, retries, timeouts — docs/04 and docs/11 §3.
+#
+# Every ceiling here is a hard stop. Breaching one halts the agent and parks the workflow at
+# HUMAN_INTERVENTION_REQUIRED with a spend report; nothing loops forever (docs/59).
+
+defaults:
+  maxRetries: 3
+  timeoutSeconds: 1200
+  budget:
+    maxCostUsd: 5
+    maxTokens: 400000
+    maxToolCalls: 60
+    maxIterations: 25
+    maxWallClockSeconds: 1200
+
+agents:
+  echo:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: echo
+    timeoutSeconds: 60
+    budget: { maxCostUsd: 0.1, maxIterations: 2, maxToolCalls: 2 }
+
+  product-owner:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: product-owner
+    budget: { maxCostUsd: 3 }
+
+  business-analyst:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: business-analyst
+    budget: { maxCostUsd: 4, maxToolCalls: 80 }
+
+  architect:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: architect
+    timeoutSeconds: 1800
+    budget: { maxCostUsd: 4 }
+
+  architecture-critic:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: architecture-critic
+    budget: { maxCostUsd: 2 }
+
+  estimator:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: estimator
+    budget: { maxCostUsd: 2 }
+
+  resource-planner:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: resource-planner
+    budget: { maxCostUsd: 1.5 }
+
+  delivery-planner:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: delivery-planner
+    budget: { maxCostUsd: 1.5 }
+
+  developer:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: developer
+    timeoutSeconds: 2400
+    budget:
+      maxCostUsd: 10
+      maxTokens: 900000
+      maxToolCalls: 200
+      maxIterations: 60
+      maxWallClockSeconds: 2400
+
+  code-reviewer:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: code-reviewer
+    budget: { maxCostUsd: 2 }
+
+  security-reviewer:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: security-reviewer
+    budget: { maxCostUsd: 2 }
+
+  qa:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: qa
+    timeoutSeconds: 1800
+    budget: { maxCostUsd: 5, maxToolCalls: 150, maxIterations: 40 }
+
+  bug-analyzer:
+    enabled: true
+    promptVersion: v1
+    contextRecipe: bug-analyzer
+    budget: { maxCostUsd: 2 }

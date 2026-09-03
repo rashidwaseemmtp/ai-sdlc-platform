@@ -1,0 +1,46 @@
+{
+  "name": "@sdlc/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rimraf dist .turbo *.tsbuildinfo",
+    "demo": "dotenv -e ../../.env -- tsx src/demo.ts"
+  },
+  "dependencies": {
+    "@sdlc/shared": "workspace:*",
+    "@sdlc/database": "workspace:*",
+    "@sdlc/observability": "workspace:*",
+    "@sdlc/ai-core": "workspace:*",
+    "@sdlc/ai-providers": "workspace:*",
+    "@sdlc/ai-router": "workspace:*",
+    "@sdlc/mcp-core": "workspace:*",
+    "@sdlc/mcp-manager": "workspace:*",
+    "@sdlc/mcp-servers": "workspace:*",
+    "@sdlc/context": "workspace:*",
+    "@sdlc/domain": "workspace:*",
+    "@sdlc/agent-runtime": "workspace:*",
+    "@sdlc/agents": "workspace:*",
+    "@sdlc/activities": "workspace:*",
+    "@sdlc/workflows": "workspace:*",
+    "@temporalio/worker": "^1.11.6",
+    "@temporalio/client": "^1.11.6",
+    "@temporalio/activity": "^1.11.6",
+    "dotenv": "^16.4.7",
+    "ioredis": "^5.4.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8",
+    "rimraf": "^6.0.1",
+    "@types/node": "^22.10.2",
+    "dotenv-cli": "^8.0.0"
+  }
+}

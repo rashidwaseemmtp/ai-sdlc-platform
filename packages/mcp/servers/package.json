@@ -1,0 +1,41 @@
+{
+  "name": "@sdlc/mcp-servers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests",
+    "clean": "rimraf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@sdlc/shared": "workspace:*",
+    "@sdlc/database": "workspace:*",
+    "@sdlc/mcp-core": "workspace:*",
+    "@sdlc/observability": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.24.1",
+    "minimatch": "^10.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "rimraf": "^6.0.1",
+    "@types/node": "^22.10.2"
+  },
+  "bin": {
+    "sdlc-mcp-product": "./dist/product/server.js",
+    "sdlc-mcp-ba": "./dist/ba/server.js",
+    "sdlc-mcp-filesystem": "./dist/filesystem/server.js"
+  }
+}

@@ -1,0 +1,194 @@
+# Model providers, catalog and per-agent routing — docs/05-model-architecture.md
+#
+# Agents never name a vendor. They declare a capability and a minimum tier; the router resolves a
+# concrete model. Secrets are referenced, never inlined.
+
+providers:
+  mock:
+    enabled: true # always on: DEMO_MODE and the entire test suite depend on it
+    kind: MOCK
+    billingMode: LOCAL_FREE
+
+  anthropic:
+    enabled: false
+    kind: API_KEY
+    billingMode: API_METERED
+    secretRef: env:ANTHROPIC_API_KEY
+
+  openai:
+    enabled: false
+    kind: API_KEY
+    billingMode: API_METERED
+    secretRef: env:OPENAI_API_KEY
+
+  google:
+    enabled: false
+    kind: API_KEY
+    billingMode: API_METERED
+    secretRef: env:GOOGLE_API_KEY
+
+  openrouter:
+    enabled: false
+    kind: API_KEY
+    billingMode: API_METERED
+    secretRef: env:OPENROUTER_API_KEY
+    baseUrl: https://openrouter.ai/api/v1
+
+  ollama:
+    enabled: false
+    kind: LOCAL
+    billingMode: LOCAL_FREE
+    baseUrl: http://localhost:11434
+    maxConcurrent: 1 # one local GPU slot
+
+  claude-subscription:
+    enabled: false
+    kind: SUBSCRIPTION
+    billingMode: SUBSCRIPTION
+    command: claude
+    seats: 1 # a seat is serialised; the router will not fan out across it
+    maxConcurrent: 1
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Catalog. Anthropic entries carry verified first-party rates. Every other
+# vendor ships disabled with null pricing: the platform reports costUnknown
+# rather than computing a cost from a price nobody confirmed.
+# ─────────────────────────────────────────────────────────────────────────────
+catalog:
+  - providerKey: mock
+    modelId: mock-frontier
+    displayName: Mock Frontier
+    tier: FRONTIER
+    capabilities:
+      [HIGH_REASONING, STRUCTURED_REASONING, CODING, STRUCTURED_OUTPUT, LONG_CONTEXT, TOOL_USE]
+    contextWindow: 1000000
+    maxOutput: 64000
+    billingMode: LOCAL_FREE
+    supportsCaching: false
+    enabled: true
+
+  - providerKey: mock
+    modelId: mock-small
+    displayName: Mock Small
+    tier: SMALL
+    capabilities: [CLASSIFICATION, STRUCTURED_OUTPUT, TOOL_USE]
+    contextWindow: 200000
+    maxOutput: 8000
+    billingMode: LOCAL_FREE
+    enabled: true
+
+  - providerKey: anthropic
+    modelId: claude-opus-5
+    displayName: Claude Opus 5
+    tier: FRONTIER
+    capabilities:
+      [
+        HIGH_REASONING,
+        STRUCTURED_REASONING,
+        CODING,
+        STRUCTURED_OUTPUT,
+        LONG_CONTEXT,
+        VISION,
+        TOOL_USE,
+      ]
+    contextWindow: 1000000
+    maxOutput: 128000
+    inputCostPer1M: 5.00
+    outputCostPer1M: 25.00
+    billingMode: API_METERED
+    supportsCaching: true
+    enabled: false
+
+  - providerKey: anthropic
+    modelId: claude-sonnet-5
+    displayName: Claude Sonnet 5
+    tier: MID
+    capabilities: [CODING, STRUCTURED_REASONING, STRUCTURED_OUTPUT, LONG_CONTEXT, VISION, TOOL_USE]
+    contextWindow: 1000000
+    maxOutput: 128000
+    inputCostPer1M: 2.00
+    outputCostPer1M: 10.00
+    billingMode: API_METERED
+    supportsCaching: true
+    enabled: false
+
+  - providerKey: anthropic
+    modelId: claude-haiku-4-5
+    displayName: Claude Haiku 4.5
+    tier: SMALL
+    capabilities: [CLASSIFICATION, STRUCTURED_OUTPUT, TOOL_USE]
+    contextWindow: 200000
+    maxOutput: 64000
+    inputCostPer1M: 1.00
+    outputCostPer1M: 5.00
+    billingMode: API_METERED
+    supportsCaching: true
+    enabled: false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Routing. `minimumTier` is a floor the router will not cross: exhausting the
+# chain raises NoEligibleModelError rather than quietly downgrading (I8).
+# ─────────────────────────────────────────────────────────────────────────────
+routing:
+  defaults:
+    capability: STRUCTURED_REASONING
+    minimumTier: MID
+    fallbackChain: [anthropic, openai, google, ollama, mock]
+
+  product-owner:
+    capability: HIGH_REASONING
+    minimumTier: FRONTIER
+
+  business-analyst:
+    capability: HIGH_REASONING
+    minimumTier: FRONTIER
+
+  architect:
+    capability: HIGH_REASONING
+    minimumTier: FRONTIER
+    effort: xhigh
+    # Three options run in parallel, so a single subscription seat must not serialise them.
+    allowSubscription: false
+
+  architecture-critic:
+    capability: HIGH_REASONING
+    minimumTier: FRONTIER
+    # Independence is structural: the critic must not reuse the architect's model.
+    requireDistinctFrom: inherit
+
+  estimator:
+    capability: STRUCTURED_REASONING
+    minimumTier: MID
+
+  resource-planner:
+    capability: STRUCTURED_REASONING
+    minimumTier: MID
+
+  delivery-planner:
+    capability: STRUCTURED_REASONING
+    minimumTier: MID
+
+  developer:
+    capability: CODING
+    minimumTier: FRONTIER
+    effort: xhigh
+
+  code-reviewer:
+    capability: CODING
+    minimumTier: MID
+
+  security-reviewer:
+    capability: CODING
+    minimumTier: MID
+
+  qa:
+    capability: CODING
+    minimumTier: MID
+
+  bug-analyzer:
+    capability: CODING
+    minimumTier: MID
+
+  classifier:
+    capability: CLASSIFICATION
+    minimumTier: SMALL

@@ -1,0 +1,56 @@
+# Execution sandbox — docs/07 §4.
+#
+# There is no generic shell tool. Builds, tests and linters are fixed activities restricted to
+# this allowlist, so a fully successful prompt injection still cannot run an arbitrary command.
+
+commands:
+  allowed:
+    - pnpm install --frozen-lockfile
+    - pnpm run build
+    - pnpm run test
+    - pnpm run lint
+    - pnpm run typecheck
+    - npx tsc --noEmit
+    - npx playwright test
+    - npm ci
+    - npm run build
+    - npm test
+    - git status
+    - git diff
+    - git add
+    - git commit
+    - git checkout
+    - git branch
+    - git push
+    - git fetch
+    - git rev-parse
+  deniedPatterns:
+    - 'rm\s+-rf'
+    - '\b(curl|wget)\b'
+    - '>\s*/dev/'
+    - '\bsudo\b'
+    - 'chmod\s+777'
+    - 'git\s+push\s+--force'
+    - 'git\s+push\s+.*\b(main|master|develop)\b'
+    - '\bnc\b|\bnetcat\b'
+    - 'base64\s+-d'
+  requireApproval:
+    - 'pnpm add *' # dependency changes are a supply-chain decision, not an implementation detail
+    - 'npm install *'
+    - 'docker *'
+
+filesystem:
+  deniedPaths:
+    - '.env*'
+    - '**/secrets/**'
+    - '**/*.pem'
+    - '**/*.key'
+    - '**/id_rsa*'
+    - '.git/config'
+    - '**/.ssh/**'
+  maxFileSizeBytes: 2000000
+
+git:
+  protectedBranches: [main, master, develop, release]
+  allowForcePush: false
+  branchPattern: '^(feat|fix|chore)/[A-Z]+-\d+-'
