@@ -1,0 +1,457 @@
+// The whole data model. Fourteen tables, one file.
+//
+// The rule that keeps it small: an agent's raw JSON output is kept once, on its AgentRun row, and
+// only the fields something else *reads* are projected into typed tables. Everything the old
+// schema spent on artifact versioning, lineage and MCP grants is gone — the agent run is the
+// provenance record, and the run row is the state machine.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String?
+  // Where the pipeline has got to, in words a person recognises.
+  phase       String   @default("NEW")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  documents    Document[]
+  requirements Requirement[]
+  stories      Story[]
+  options      ArchitectureOption[]
+  adrs         Adr[]
+  estimates    Estimate[]
+  plan         Plan?
+  approvals    Approval[]
+  agentRuns    AgentRun[]
+  events       Event[]
+  run          PipelineRun?
+  pullRequests PullRequest[]
+  testCases    TestCase[]
+  bugs         Bug[]
+
+  @@map("projects")
+}
+
+/// Raw client material — a meeting transcript, a spec, an email thread.
+model Document {
+  id        String   @id @default(uuid())
+  projectId String
+  title     String
+  kind      String   @default("NOTE")
+  content   String
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("documents")
+}
+
+model Requirement {
+  id         String   @id @default(uuid())
+  projectId  String
+  ref        String
+  type       String
+  priority   String
+  statement  String
+  rationale  String?
+  confidence Float    @default(0.5)
+  /// Document ids the agent cited. A requirement with none never gets written.
+  sourceRefs Json     @default("[]")
+  status     String   @default("REVIEW")
+  createdAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, ref])
+  @@map("requirements")
+}
+
+model Story {
+  id                 String   @id @default(uuid())
+  projectId          String
+  ref                String
+  title              String
+  userStory          String
+  businessValue      String   @default("")
+  description        String   @default("")
+  priority           String   @default("SHOULD")
+  sizeSignal         String   @default("M")
+  labels             Json     @default("[]")
+  acceptanceCriteria Json     @default("[]")
+  edgeCases          Json     @default("[]")
+  requirementRefs    Json     @default("[]")
+  /// Refs of stories that must ship first. Read back as a DAG by the delivery planner.
+  dependsOn          Json     @default("[]")
+  /// The agent's own doubts, plus anything the platform's independent scan found.
+  qualityFlags       Json     @default("[]")
+  /// REVIEW → APPROVED → PLANNED → IMPLEMENTED → TESTED → DONE
+  status             String   @default("REVIEW")
+  orderIndex         Int      @default(0)
+  createdAt          DateTime @default(now())
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  estimates    Estimate[]
+  pullRequests PullRequest[]
+  testCases    TestCase[]
+  bugs         Bug[]
+
+  @@unique([projectId, ref])
+  @@map("stories")
+}
+
+model ArchitectureOption {
+  id        String   @id @default(uuid())
+  projectId String
+  round     Int      @default(1)
+  variant   String
+  name      String
+  overview  String
+  /// The full architect output, verbatim. The UI renders it; nothing else parses it.
+  detail    Json
+  createdAt DateTime @default(now())
+
+  project     Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  evaluations ArchitectureEvaluation[]
+  adrs        Adr[]
+
+  @@unique([projectId, round, variant])
+  @@map("architecture_options")
+}
+
+model ArchitectureEvaluation {
+  id        String @id @default(uuid())
+  optionId  String
+  criterion String
+  score     Float
+  reasoning String
+
+  option ArchitectureOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([optionId, criterion])
+  @@map("architecture_evaluations")
+}
+
+model Adr {
+  id           String   @id @default(uuid())
+  projectId    String
+  number       Int
+  title        String
+  status       String   @default("APPROVED")
+  context      String
+  decision     String
+  rationale    String
+  consequences Json     @default("[]")
+  alternatives Json     @default("[]")
+  optionId     String?
+  approvedBy   String?
+  createdAt    DateTime @default(now())
+
+  project Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  option  ArchitectureOption? @relation(fields: [optionId], references: [id])
+
+  @@unique([projectId, number])
+  @@map("adrs")
+}
+
+model Estimate {
+  id             String   @id @default(uuid())
+  projectId      String
+  storyId        String
+  /// PRIMARY and INDEPENDENT are two separate runs; the gap between them is the signal.
+  estimatorKind  String
+  storyPoints    Float
+  hours          Float
+  rangeLowHours  Float
+  rangeHighHours Float
+  confidence     Float
+  riskLevel      String
+  riskBuffer     Float    @default(0)
+  drivers        Json     @default("[]")
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  story   Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, estimatorKind])
+  @@map("estimates")
+}
+
+/// One plan per project: staffing, sequencing and the computed dependency waves together.
+model Plan {
+  id                String   @id @default(uuid())
+  projectId         String   @unique
+  strategy          String   @default("")
+  resourcePlan      Json     @default("{}")
+  milestones        Json     @default("[]")
+  waves             Json     @default("[]")
+  criticalPathHours Float    @default(0)
+  cycles            Json     @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("plans")
+}
+
+/// A gate waiting on a person. Creating one stops the pipeline; deciding it starts it again.
+model Approval {
+  id             String    @id @default(uuid())
+  projectId      String
+  gate           String
+  title          String
+  summary        String    @default("")
+  /// Whatever the stage wants the approver to see — scores, variance, waves.
+  context        Json      @default("{}")
+  status         String    @default("PENDING")
+  /// Set once the stage has acted on the decision, so a re-entrant stage never acts on it twice.
+  consumed       Boolean   @default(false)
+  requestedAt    DateTime  @default(now())
+  expiresAt      DateTime?
+  decidedAt      DateTime?
+  decidedBy      String?
+  comment        String?
+  /// Structured feedback on CHANGES_REQUESTED, fed back into the agent's next run.
+  changeRequests Json      @default("[]")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, gate])
+  @@map("approvals")
+}
+
+/// One row per agent execution — the provenance record for everything above.
+model AgentRun {
+  id           String    @id @default(uuid())
+  projectId    String
+  agentKey     String
+  phase        String    @default("")
+  status       String    @default("RUNNING")
+  model        String    @default("")
+  provider     String    @default("")
+  inputTokens  Int       @default(0)
+  outputTokens Int       @default(0)
+  costUsd      Float     @default(0)
+  durationMs   Int       @default(0)
+  input        Json      @default("{}")
+  output       Json?
+  /// The agent's own account of what it concluded and why. Never chain-of-thought.
+  summary      String?
+  warnings     Json      @default("[]")
+  error        String?
+  /// api / subscription / local — how this run was entitled to ask.
+  authMode     String    @default("api")
+  /// Subscription runs cost nothing per token but consume plan quota; this counts the calls.
+  quotaUnits   Int       @default(0)
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  toolCalls ToolCall[]
+
+  @@index([projectId, startedAt])
+  @@map("agent_runs")
+}
+
+/// The state machine. One row per project; the runner claims it, advances one stage, releases it.
+model PipelineRun {
+  id              String    @id @default(uuid())
+  projectId       String    @unique
+  stage           String    @default("discovery")
+  status          String    @default("RUNNABLE")
+  /// Revision count *within* the current stage. Reset on advance; bounds the revise loops.
+  iteration       Int       @default(0)
+  attempts        Int       @default(0)
+  completedStages String[]  @default([])
+  spendUsd        Float     @default(0)
+  claimedBy       String?
+  claimedAt       DateTime?
+  parkedCode      String?
+  parkedReason    String?
+  startedAt       DateTime  @default(now())
+  finishedAt      DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, updatedAt])
+  @@map("pipeline_runs")
+}
+
+/// Append-only activity log. What the dashboard's timeline reads.
+model Event {
+  id        String   @id @default(uuid())
+  projectId String
+  type      String
+  actor     String   @default("system")
+  payload   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("events")
+}
+
+/// One implemented story: the branch, the changes, and what the reviewers said about them.
+model PullRequest {
+  id        String   @id @default(uuid())
+  projectId String
+  storyId   String
+  branch    String
+  title     String
+  summary   String   @default("")
+  /// LOCAL when it only exists in the workspace; OPEN once pushed to GitHub.
+  status    String   @default("LOCAL")
+  /// Set only when a GitHub token is configured and the push succeeded.
+  number    Int?
+  url       String?
+  files     Json     @default("[]")
+  diff      String   @default("")
+  /// One entry per reviewer run: verdict, summary, findings.
+  reviews   Json     @default("[]")
+  /// How many times the developer went back round on review feedback.
+  fixRounds Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  story   Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId])
+  @@map("pull_requests")
+}
+
+model TestCase {
+  id             String   @id @default(uuid())
+  projectId      String
+  storyId        String
+  ref            String
+  title          String
+  objective      String   @default("")
+  type           String   @default("FUNCTIONAL")
+  priority       String   @default("SHOULD")
+  criterionRef   String?
+  steps          Json     @default("[]")
+  expectedResult String   @default("")
+  /// PLANNED until something actually runs it.
+  status         String   @default("PLANNED")
+  /// PASSED / FAILED / NOT_RUN, plus how it was run and what was observed.
+  result         String   @default("NOT_RUN")
+  evidence       Json     @default("{}")
+  runRound       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  story   Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, ref])
+  @@map("test_cases")
+}
+
+model Bug {
+  id           String   @id @default(uuid())
+  projectId    String
+  storyId      String
+  ref          String
+  title        String
+  description  String   @default("")
+  severity     String   @default("MEDIUM")
+  testCaseRefs Json     @default("[]")
+  rootCause    String   @default("")
+  isTestDefect Boolean  @default(false)
+  status       String   @default("OPEN")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  story   Story   @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, ref])
+  @@map("bugs")
+}
+
+/// An MCP server the platform can connect to. Configured entirely from the dashboard.
+model McpServer {
+  key       String    @id
+  name      String
+  /// stdio spawns a process; http speaks streamable HTTP to a URL.
+  transport String    @default("stdio")
+  command   String    @default("")
+  args      Json      @default("[]")
+  /// Server-specific environment (tokens, paths). Values are never returned to the browser.
+  env       Json      @default("{}")
+  url       String    @default("")
+  enabled   Boolean   @default(true)
+  /// Filled in by "test connection": what the server advertises.
+  tools     Json      @default("[]")
+  status    String    @default("UNKNOWN")
+  error     String?
+  checkedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  grants McpGrant[]
+
+  @@map("mcp_servers")
+}
+
+/// What one agent may call on one server. Absent means denied — there is no implicit access.
+model McpGrant {
+  id             String   @id @default(uuid())
+  agentKey       String
+  serverKey      String
+  /// Glob patterns against tool names: ["get_*", "read_file"]. ["*"] grants the whole server.
+  toolPatterns   Json     @default("[\"*\"]")
+  enabled        Boolean  @default(true)
+  /// Ceiling on how many times this agent may call this server in one run.
+  maxCallsPerRun Int      @default(50)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  server McpServer @relation(fields: [serverKey], references: [key], onDelete: Cascade)
+
+  @@unique([agentKey, serverKey])
+  @@map("mcp_grants")
+}
+
+/// Every tool call an agent made or was refused. The audit trail for anything with side effects.
+model ToolCall {
+  id         String   @id @default(uuid())
+  agentRunId String
+  serverKey  String
+  toolName   String
+  args       Json     @default("{}")
+  /// ALLOWED / DENIED / FAILED — a denial is recorded as loudly as a success.
+  outcome    String
+  reason     String?
+  preview    String   @default("")
+  durationMs Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  agentRun AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@index([agentRunId])
+  @@map("tool_calls")
+}
+
+/// Everything configurable, edited from the dashboard's Settings page. One row per key.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

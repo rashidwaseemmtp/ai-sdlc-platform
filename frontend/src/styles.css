@@ -1,0 +1,209 @@
+/*
+ * One small design system. This is an operations console: density and legibility beat decoration,
+ * and every status has to be readable at a glance in both themes.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --border: #dfe3e8;
+  --text: #16191d;
+  --muted: #5c6470;
+  --accent: #2563eb;
+  --accent-soft: #e8f0fe;
+
+  --ok: #15803d;
+  --ok-soft: #e7f6ec;
+  --warn: #b45309;
+  --warn-soft: #fdf3e3;
+  --danger: #b42318;
+  --danger-soft: #fdeceb;
+
+  --radius: 8px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #161a20;
+    --surface-2: #1c2128;
+    --border: #2a313a;
+    --text: #e6e9ee;
+    --muted: #99a2b0;
+    --accent: #6ea0ff;
+    --accent-soft: #16233c;
+
+    --ok: #6ee7a8;
+    --ok-soft: #12261b;
+    --warn: #fbbf5a;
+    --warn-soft: #2a2013;
+    --danger: #ff8b82;
+    --danger-soft: #2c1715;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1 { font-size: 20px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+h3 { font-size: 13px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+/* ── layout ─────────────────────────────────────────────────────────────── */
+
+.layout { display: grid; grid-template-columns: 200px 1fr; min-height: 100vh; }
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 18px 12px;
+}
+.brand { font-weight: 600; padding: 0 8px 16px; letter-spacing: -.01em; }
+.brand small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+
+.nav a {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--text);
+}
+.nav a:hover { background: var(--surface-2); text-decoration: none; }
+.nav a.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+
+.main { padding: 22px 26px 60px; max-width: 1180px; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+
+/* ── surfaces ───────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+
+.stat { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.pre {
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  max-height: 460px;
+  overflow: auto;
+}
+
+/* ── tables ─────────────────────────────────────────────────────────────── */
+
+table { width: 100%; border-collapse: collapse; }
+th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+.table-card { padding: 4px 2px; }
+
+/* ── controls ───────────────────────────────────────────────────────────── */
+
+button, .button {
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+button.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+
+input, textarea, select {
+  font: inherit;
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+textarea { font-family: var(--mono); font-size: 12px; min-height: 120px; resize: vertical; }
+label { display: block; margin-bottom: 10px; }
+label span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.field-hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 14px; }
+legend { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 0 6px; }
+
+/* ── badges & banners ───────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.badge.muted { background: var(--surface-2); color: var(--muted); }
+.badge.ok { background: var(--ok-soft); color: var(--ok); }
+.badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.danger { background: var(--danger-soft); color: var(--danger); }
+.badge.info { background: var(--accent-soft); color: var(--accent); }
+
+.banner { padding: 9px 12px; border-radius: 6px; margin-bottom: 14px; border: 1px solid transparent; }
+.banner.danger { background: var(--danger-soft); color: var(--danger); border-color: var(--danger); }
+.banner.ok { background: var(--ok-soft); color: var(--ok); border-color: var(--ok); }
+.banner.warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+
+.empty { padding: 26px; text-align: center; color: var(--muted); }
+
+/* ── pipeline strip ─────────────────────────────────────────────────────── */
+
+.pipeline { display: flex; gap: 6px; flex-wrap: wrap; }
+.pipeline .step {
+  flex: 1 1 0;
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+.pipeline .step.done { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.pipeline .step.current { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.pipeline .step small { display: block; opacity: .8; font-weight: 400; }

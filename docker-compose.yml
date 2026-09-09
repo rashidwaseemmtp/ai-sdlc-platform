@@ -1,0 +1,62 @@
+name: ai-sdlc-platform
+
+# Three containers, one command.
+#
+#   db        Postgres. The only state anywhere — the domain, the settings, the MCP grants, the
+#             event log and the pipeline's state machine all live in it.
+#   backend   The API, the twelve agents and the pipeline runner, in one process.
+#   frontend  The dashboard, served by nginx, which also proxies /api to the backend so the browser
+#             only ever talks to one origin.
+#
+# There is nothing to configure before `docker compose up`: providers, keys, MCP servers and grants
+# are all set in the dashboard, and the schema and demo project are applied when the backend boots.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sdlc
+      POSTGRES_PASSWORD: sdlc
+      POSTGRES_DB: sdlc
+    ports: ['5433:5432'] # 5433 on the host, so a local Postgres on 5432 keeps working
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sdlc -d sdlc']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        # Set false for a much smaller image if you only ever use API keys.
+        INSTALL_SUBSCRIPTION_CLIS: 'true'
+    environment:
+      DATABASE_URL: postgresql://sdlc:sdlc@db:5432/sdlc
+      PORT: 3001
+      WORKSPACE_ROOT: /workspace
+    ports: ['3001:3001'] # exposed so you can curl the API directly; the UI does not need it
+    volumes:
+      # The code the developer agent writes. A named volume so it survives a rebuild — and so you
+      # can inspect it with `docker compose exec backend ls /workspace`.
+      - workspace:/workspace
+      # Where the subscription CLIs keep their logins, so signing in once survives a restart.
+      - clihome:/root
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports: ['3000:80']
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  dbdata:
+  workspace:
+  clihome:

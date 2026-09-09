@@ -1,170 +1,195 @@
-# AI-Native Software Delivery Organization
+# AI SDLC Platform
 
-A locally-runnable platform where specialized AI agents collaborate through a durable workflow
-engine to carry work from client conversations to tested, reviewed code — with mandatory human
-approval at every consequential decision.
+Twelve specialised AI agents take a project from raw client material — meeting transcripts, emails,
+specifications — through requirements, a backlog, a chosen architecture, estimates and a plan, to
+written code, reviewed and tested. A human approves every consequential decision.
 
-**Status: running end to end.** `pnpm demo` takes the seeded project from two meeting documents to
-a completed pipeline — requirements, backlog, three architecture options, an ADR, estimates, a
-delivery plan, pull requests, test cases and QA results — across 31 agent runs and four human
-approval gates, with no credentials configured.
-
-## The one idea
-
-Agents do not pass prompts to each other. They read and write **versioned project state** in
-PostgreSQL, orchestrated by **Temporal**, using **pluggable models** and **pluggable MCP tools**.
+Two pieces of software: a **backend** and a **frontend**. Nothing else.
 
 ```
-                        ORCHESTRATOR (Temporal — control plane)
-                                     │
-        ┌────────────────────────────┼────────────────────────────┐
-        ▼                            ▼                            ▼
-   PO · BA · Architect        Developer · Reviewer            QA · Bug Analyst
-        └────────────────────────────┼────────────────────────────┘
-                                     ▼
-                      PROJECT STATE (PostgreSQL — source of truth)
-                    immutable versioned artifacts + full lineage
+docker compose up --build     # then open http://localhost:3000
 ```
 
-That separation is what makes the system resumable (Temporal replays), auditable (every input
-version is recorded), and testable (agents are contract-tested against fixture state).
+That is the whole setup. The database schema is applied and a demo project seeded on first boot.
+Open **Settings**, pick a provider, paste an API key (or sign in to a subscription CLI), then open
+the demo project and press **Start**.
 
-## Pipeline
+---
+
+## What it does
 
 ```
-Meetings / notes / docs
-  └─ Product Owner ─ Business Analyst ─ [BACKLOG APPROVAL]
-     └─ Architect ×3 ─ Architecture Critic ─ [ARCHITECTURE APPROVAL] ─ ADR
-        └─ Estimator ×2 ─ Resource Planner ─ [PLAN APPROVAL]
-           └─ Developer ─ Figma MCP · GitHub MCP ─ PR ─ AI + security review ─ [PR APPROVAL]
-              └─ QA ─ Playwright MCP ─ report ─ (bounded fix loop) ─ [QA APPROVAL]
+Source documents
+  └─ Product Owner ────── requirements, traced to what the client actually said
+     └─ Business Analyst ─ backlog with testable criteria ───────── [BACKLOG]
+        └─ Architect ×3 ── three committed options
+           └─ Critic ───── blind scoring ────────────────────────── [ARCHITECTURE] → ADR
+              └─ Estimator ×2 ─ two independent estimates ───────── [ESTIMATION]
+                 └─ Resource + Delivery planners ─ waves ────────── [READINESS]
+                    └─ Developer ─ code ─ Reviewer + Security ──── [PULL REQUEST]
+                       └─ QA ─ tests ─ Bug Analyzer ─ fix loop ─── [QA]
 ```
 
-Seven gates, each configurable, each pausing a durable workflow on a Temporal signal — never a
-polling loop, and never auto-approving on timeout.
+Twelve agents, seven stages, six gates. A gate stops the project until a person approves it, rejects
+it, or writes down what to change — and "request changes" sends the agent back round with that
+feedback, up to a bound you set.
 
-## Quick start
+## Architecture
+
+```
+frontend/   React + Vite, served by nginx, which proxies /api to the backend
+backend/    Express + Prisma. The API, the agents and the runner in one process.
+            src/agents/        the twelve agents — prompt, schema, checks, persistence
+            src/pipeline.ts    discovery, backlog, architecture, estimation, planning
+            src/stages-delivery.ts  development and QA, with their bounded loops
+            src/stage-kit.ts   what a stage is: gates, re-entrancy, the settle branch
+            src/runner.ts      claims a project, advances it one stage, releases it
+            src/domain.ts      the arithmetic: scoring, variance, dependency waves
+            src/llm.ts         one function, three adapters, five providers
+            src/mcp.ts         tool servers, deny-by-default grants, the audit trail
+            src/workspace.ts   where the code lands; git, path guards, GitHub push
+db          Postgres — the only state anywhere
+```
+
+Four ideas carry the design:
+
+**Agents read project state, not each other's prose.** Every agent is handed rows from Postgres,
+rendered as labelled sections, and writes rows back. Nothing is passed agent-to-agent, so the
+pipeline resumes from the database alone.
+
+**The pipeline has no memory.** A stage is a re-entrant function: it opens a gate and returns, and
+an approval decision makes the project claimable again. Nothing lives between two stage calls except
+rows, which is why a restart mid-project loses nothing and there is no workflow engine. Development
+and QA go one story per tick, so a crash costs one story rather than the backlog.
+
+**The platform does its own checking.** A model proposes; `domain.ts` decides. Which architecture
+option wins, whether two estimates disagree enough to need a human, what order the work can be built
+in, and whether a story is actually testable are all computed in pure functions with no model in the
+loop. The Business Analyst reports its own doubts about the backlog, *and* the platform re-derives
+them independently — anything the agent missed is shown to the approver.
+
+**Capability is configuration; judgement is code.** Which model answers, which tool servers exist and
+which tools each agent may call are all edited in the dashboard. The agents' prompts, output schemas
+and quality checks are files in the repository, because an operator quietly changing an agent's
+schema between runs makes its audit trail meaningless.
+
+## Providers
+
+Every provider × entitlement pair can be configured and left configured. **Exactly one is active at
+a time** — switching from metered billing to a subscription is one dropdown.
+
+| Provider | API key | Subscription | Tools |
+|---|---|---|---|
+| Anthropic — Claude | ✓ | Claude Code CLI · Pro / Max | API only |
+| OpenAI — ChatGPT | ✓ | Codex CLI · Plus / Pro / Business | API only |
+| Google — Gemini | ✓ | Gemini CLI · AI Pro / Ultra | API only |
+| OpenRouter | ✓ | — | ✓ |
+| Ollama (local) | — | local server | ✓ |
+
+A subscription holds **no credential here** — the vendor's CLI owns its own login, and the platform
+strips that vendor's API-key variables from the CLI's environment so a stray key cannot silently
+divert the run onto metered billing. Sign in once, inside the container:
 
 ```bash
-pnpm install
-pnpm dev            # infra + schema + seed + worker + API + dashboard
+docker compose exec backend claude      # then /login
+docker compose exec backend codex login --device-auth
+docker compose exec backend gemini      # choose "Login with Google"
 ```
 
-Then in a second terminal:
+**A subscription cannot run agents that use MCP tools.** Not because the CLIs lack tools — because a
+tool executed inside a vendor's CLI bypasses this platform's permission engine and audit trail. So
+the developer, the reviewers and QA are sent to a second entitlement you name on the Settings page
+("send agents with MCP tools to a different entitlement"), and the rest of the pipeline stays on the
+seat. Both halves are explicit; nothing is inferred.
+
+## MCP and tools
+
+The **MCP & tools** page configures tool servers (stdio or streamable HTTP) and a per-agent grant
+matrix. Four servers are seeded ready to use and **switched off**: filesystem, git, GitHub and
+Playwright. Enable one, press *Test connection* to discover what it advertises, then grant patterns
+per agent — `get_*`, `read_file`, `*`.
+
+Three rules hold the safety together:
+
+- **Deny by default.** An agent with no grant cannot see a server's tools, let alone call them.
+- **A denial is a tool result, not a crash.** The model is told "permission denied" and adapts; the
+  attempt is recorded. This is the layer that contains a successful prompt injection.
+- **Some things are never grantable.** Merging, force-pushing and deleting are on a permanent deny
+  list that no grant overrides, because they are exactly what a compromised agent would ask for.
+
+Every call an agent made or was refused is on its run page.
+
+## Code, and GitHub
+
+The developer returns a change set; the platform applies it. Each project gets a git repository the
+backend owns, each story gets a branch, and the diff is what the reviewers read and what the pull
+request gate shows. Paths that escape the workspace or touch git internals, env files or key
+material are refused before they reach disk.
+
+With a GitHub token in Settings, the platform also pushes the branch and opens a real pull request —
+the platform, never an agent, because the thing that opens a PR should be the thing that cannot
+merge it, and keeping the token out of the tool layer means no prompt can talk its way into using it.
+
+## Configuration
+
+Everything is on **Settings**, stored in the database, applied on the runner's next tick. No YAML,
+no environment variables beyond `DATABASE_URL`, `PORT` and `WORKSPACE_ROOT`:
+
+- every provider × entitlement pair: key, model, base URL, CLI binary, token prices
+- which pair is active, and which pair tool-using agents are sent to
+- token ceiling and reasoning effort
+- spend ceilings per project and per agent; tool calls per run
+- revision rounds for the backlog, architecture, code review and QA fix loops
+- the estimation variance threshold
+- which of the six gates require a human, and how long each waits
+- GitHub token, repository and whether to push at all
+- runner poll interval and how many projects advance at once
+
+## Running it locally, without Docker
 
 ```bash
-pnpm demo           # runs the whole pipeline, approving each gate
-pnpm demo --changes 1   # request changes once at the backlog gate to exercise the revision loop
+docker compose up -d db          # or point DATABASE_URL at any Postgres
+
+cd backend
+npm install
+npx prisma db push
+npm run seed
+npm run dev                      # http://localhost:3001/api
+
+cd ../frontend
+npm install
+npm run dev                      # http://localhost:3000, proxying /api to :3001
 ```
 
-| Service | URL |
-|---|---|
-| Dashboard | http://localhost:3000 |
-| API health | http://localhost:3001/api/v1/health |
-| Temporal UI | http://localhost:8233 |
-| Postgres | `localhost:5433` |
+## API
 
-Demo mode (`DEMO_MODE=true`, the default) uses mock model, GitHub, Figma and Playwright providers,
-so the entire pipeline runs with zero external credentials. Adding a real provider is a
-configuration change, not a code change.
-
-Useful commands:
-
-```bash
-pnpm doctor       # check the local environment
-pnpm stop         # stop worker / API processes (cross-platform)
-pnpm infra:up     # just the containers
-pnpm db:push      # apply schema + invariant triggers
-pnpm db:seed      # reseed the demo project
-pnpm test         # unit, domain, permission, budget and workflow tests
-pnpm lint         # includes the workflow determinism firewall
-```
-
-## What actually runs
-
-From a clean `pnpm demo`:
-
-```
-Customer Management SaaS (CMS) — phase COMPLETED
-  requirements 7   stories 3   arch options 3   ADRs 1
-  estimates 6      pull requests 3
-  test cases 21    results 21   bugs 0
-  31 agent runs, 0 failures, 171,890 tokens
-```
-
-And the trace resolves all the way back:
-
-```
-Discovery call — 12 March  →  REQ-001  →  US-101  →  TC-10100
-```
-
-## Repository layout
-
-```
-apps/         api (NestJS) · worker (Temporal) · dashboard (Next.js)
-packages/     shared · database · observability
-              ai/{core,providers,router}   provider-agnostic model layer
-              mcp/{core,manager,servers}   MCP layer, permissions, mocks
-              context · domain             retrieval; pure business rules
-              agents/{runtime,catalog}     the 12-step loop; 13 agent contracts
-              workflows                    DETERMINISTIC ONLY
-              activities                   ALL side effects
-prompts/      versioned agent prompts, pinned per run
-config/       models · mcp · agents · workflows · security
-infra/        docker compose, temporal config, scripts
-docs/         the design package (start at docs/00-overview.md)
-```
-
-Two dependency rules carry most of the weight, and both are enforced rather than documented:
-**workflow code may import only `@sdlc/shared` and activity types** (checked by `eslint.config.js`),
-and **`domain` performs no I/O**.
-
-## Non-negotiable invariants
-
-| # | Invariant | Enforced by |
+| Method | Path | |
 |---|---|---|
-| I1 | Workflow code does no I/O, no clock, no randomness | ESLint rules + the workflow bundler |
-| I2 | Every agent output is Zod-validated before persistence | The runtime's only persistence path |
-| I3 | Approved artifact versions are immutable | Database trigger |
-| I4 | Activities carry artifact references, never bodies | Reference-passing throughout |
-| I5 | No agent may call an MCP tool it was not granted | Permission engine, deny-by-default |
-| I6 | Every autonomous loop has attempt, cost, token and wall-clock ceilings | `BudgetGuard` + workflow bounds |
-| I7 | AI never merges a PR unless explicitly and doubly enabled | No merge scope in the grant matrix |
-| I8 | A high-risk task never silently falls back to a weaker model | Router raises rather than downgrades |
-| I9 | Private chain-of-thought is never surfaced or stored | Agents emit a structured decision summary |
-| I10 | Every artifact traces to its sources | Lineage written by the platform, not the agent |
+| GET/PUT | `/api/settings` | everything the Settings page edits |
+| GET | `/api/providers/probe` | which subscription CLIs are actually installed |
+| GET | `/api/agents` | the catalogue and each agent's grants, read-only |
+| GET/POST/PUT/DELETE | `/api/mcp/servers` | tool servers |
+| POST | `/api/mcp/servers/:key/test` | connect and discover tools |
+| GET/PUT/DELETE | `/api/mcp/grants` | the grant matrix |
+| GET | `/api/mcp/calls` | the tool-call audit trail |
+| GET/POST | `/api/projects` | list, create |
+| GET | `/api/projects/:key` | overview, counts, spend, gates |
+| POST | `/api/projects/:key/documents` | add source material |
+| POST | `/api/projects/:key/start` | start the pipeline (also `pause`, `resume`, `cancel`) |
+| GET | `/api/projects/:key/{requirements,stories,architecture,code,qa,events}` | what the agents produced |
+| GET | `/api/approvals` | gates waiting on a person |
+| POST | `/api/approvals/:id/decide` | approve, reject, or request changes |
+| GET | `/api/runs` | every agent execution, with cost, tools and provenance |
 
-These are tested, not asserted. `pnpm test` covers the budget ceilings, the permission matrix (all
-twelve agents provably unable to merge), the capability floor, the bounded revision and PR-fix
-loops, and the approval-gate expiry path. The database invariants are verified against real
-Postgres.
+## What it does not do
 
-## Documentation
+It does not merge, deploy or release. It does not retry a failed model call on a different provider
+— one entitlement is active, and a failure is reported rather than quietly re-billed elsewhere. It
+does not retrieve context by embedding similarity; the whole project state goes in the prompt.
 
-| Doc | Contents |
-|---|---|
-| [00 Overview](docs/00-overview.md) | Vision, principles, invariants |
-| [01 System Architecture](docs/01-system-architecture.md) | Components, topology, execution paths |
-| [02 Data Model](docs/02-data-model.md) | 70 tables, ERD, immutability rules |
-| [03 Workflows](docs/03-workflows.md) | Temporal catalog, signals, retries, determinism |
-| [04 Agents](docs/04-agent-architecture.md) | Contracts, runtime loop, quality gates |
-| [05 Models](docs/05-model-architecture.md) | Providers, API vs subscription billing, router |
-| [06 MCP](docs/06-mcp-architecture.md) | Manager, transports, permissions, servers |
-| [07 Security](docs/07-permissions-and-security.md) | RBAC, sandbox, secrets, prompt injection |
-| [08 Approvals](docs/08-approvals.md) | Gates, signal protocol, timeouts |
-| [09 Context & Artifacts](docs/09-context-and-artifacts.md) | Retrieval, versioning, lineage |
-| [10 API](docs/10-api-spec.md) | REST surface, SSE |
-| [11 Configuration](docs/11-configuration.md) | Layers, precedence, env, YAML |
-| [12 Repository](docs/12-repository-structure.md) | Monorepo layout, dependency rules |
-| [13 Roadmap](docs/13-roadmap.md) | Phases, MVP, exit criteria |
-| [14 Testing](docs/14-testing-strategy.md) | Tiers, mocks, replay, invariant tests |
-| [15 Implementation Notes](docs/15-implementation-notes.md) | **Deviations, bugs the build found, known gaps** |
+QA runs the tests it can actually run. With no browser or shell server granted it reports cases as
+**not run** rather than passing them, and says so on the gate.
 
-Read doc 15 before extending anything: it records where the design was wrong and why.
 
-## Design goal
-
-Not the most autonomous system possible — the most **reliable, inspectable, configurable and
-progressively autonomous** one. AI handles analysis, generation, implementation, testing and
-review. Humans keep business decisions, architecture approval, resource commitments, merging and
-release.
+Claude Login
+docker compose exec backend claude auth login
